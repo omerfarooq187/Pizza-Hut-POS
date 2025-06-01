@@ -22,14 +22,15 @@ jobs:
       - name: Grant execute permission for Gradle
         run: |
           git config --global core.longpaths true
-          ./gradlew --version
+          gradlew.bat --version
+        shell: cmd
 
       - name: Build MSI installer
-        run: ./gradlew packageMsi
+        run: gradlew.bat packageMsi
+        shell: cmd
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
           name: PizzaHutPOS-MSI
           path: build/compose/binaries/main/msi/
-
