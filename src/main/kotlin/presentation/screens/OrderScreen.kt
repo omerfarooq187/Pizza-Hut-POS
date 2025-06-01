@@ -3,6 +3,7 @@ package presentation.screens
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.*
@@ -18,11 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import data.model.MenuItemWithVariants
 import data.model.OrderItem
@@ -73,7 +77,12 @@ fun OrderScreen( orderId: Int? = null,onFinalize: () -> Unit) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(if (orderId == null ) "New Order" else "Edit Order", style = MaterialTheme.typography.headlineSmall) },
+                title = {
+                    Text(
+                        if (orderId == null) "New Order" else "Edit Order",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -85,59 +94,66 @@ fun OrderScreen( orderId: Int? = null,onFinalize: () -> Unit) {
     ) { padding ->
         Box(
             modifier = Modifier
-                .padding(padding)
                 .fillMaxSize()
+                .padding(padding)
         ) {
-// Header Section - Better layout with wrap & responsiveness
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
             ) {
-                // First Row: Search and Member Code
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        CustomSearchBar(viewModel)
-                    }
-                    Box(modifier = Modifier.width(180.dp)) {
-                        MemberCodeInput(viewModel)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Second Row: Order Type and Service Charge
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        OrderTypeSelector(viewModel)
-                    }
-                    Box(modifier = Modifier.width(140.dp)) {
-                        ServiceChargeInput(viewModel)
-                    }
-                }
-                MenuGrid(
-                    viewModel = viewModel,
+                // -- Inner Column with form + MenuGrid --
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                )
+                        .fillMaxWidth()
+                ) {
+                    // First Row: Search and Member Code
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            CustomSearchBar(viewModel)
+                        }
+                        Box(modifier = Modifier.width(180.dp)) {
+                            MemberCodeInput(viewModel)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Second Row: Order Type and Service Charge
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            OrderTypeSelector(viewModel)
+                        }
+                        Box(modifier = Modifier.width(140.dp)) {
+                            ServiceChargeInput(viewModel)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    MenuGrid(
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
-            // Order Summary (Fixed at bottom)
             if (state.items.isNotEmpty()) {
                 OrderSummarySection(
                     viewModel = viewModel,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(16.dp)
                         .fillMaxWidth()
+                        .padding(16.dp)
                 )
             }
         }
@@ -437,15 +453,37 @@ fun OrderSummarySection(
 ) {
     val state by viewModel.state
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        contentAlignment = Alignment.BottomEnd
+            .padding(16.dp)
     ) {
+        val boxWidth = maxWidth
+        val boxHeight = maxHeight
+        val cardWidth = 300.dp
+        val cardHeight = 360.dp // estimated height of summary card
+
+        // Convert Dp to Px
+        val density = LocalDensity.current
+        val initialOffsetX = with(density) { (boxWidth - cardWidth).toPx() }
+        val initialOffsetY = with(density) { (boxHeight - cardHeight).toPx() }
+
+        val offsetX = remember { mutableFloatStateOf(initialOffsetX) }
+        val offsetY = remember { mutableFloatStateOf(initialOffsetY) }
+
+        val draggableModifier = Modifier
+            .offset { IntOffset(offsetX.value.toInt(), offsetY.value.toInt()) }
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    offsetX.value += dragAmount.x
+                    offsetY.value += dragAmount.y
+                }
+            }
+
         Card(
-            modifier = Modifier
-                .width(300.dp)
+            modifier = draggableModifier
+                .width(cardWidth)
                 .wrapContentHeight(),
             elevation = CardDefaults.cardElevation(12.dp),
             shape = RoundedCornerShape(20.dp)
@@ -456,64 +494,31 @@ fun OrderSummarySection(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "Order Summary",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
+                Text("Order Summary", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                 Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
-                LazyColumn(
-                    modifier = Modifier
-                        .heightIn(max = 140.dp)
-                ) {
-                    items(
-                        items = state.items.values.toList(),
-                        key = { "${it.itemId}-${it.variantId}" }
-                    ) { item ->
-                        OrderItemRow(item) {
-                            viewModel.removeItem(item)
-                        }
+                LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
+                    items(state.items.values.toList(), key = { "${it.itemId}-${it.variantId}" }) { item ->
+                        OrderItemRow(item) { viewModel.removeItem(item) }
                     }
                 }
-
                 Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     PriceRow("Subtotal:", state.total + state.discount)
                     if (state.isMember) {
                         PriceRow("Member Discount:", -state.discount)
                     }
-                    PriceRow(
-                        "Total:",
-                        state.total,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = PizzaRed
-                    )
+                    PriceRow("Total:", state.total, style = MaterialTheme.typography.titleMedium, color = PizzaRed)
                 }
-
                 FilledTonalButton(
                     onClick = { viewModel.finalizeOrder() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = PizzaRed,
-                        contentColor = Color.White
-                    ),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = PizzaRed, contentColor = Color.White),
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DoneAll,
-                        contentDescription = null
-                    )
+                    Icon(imageVector = Icons.Default.DoneAll, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Finalize Order")
                 }
-
                 Text(
                     "${state.items.size} Items",
                     style = MaterialTheme.typography.bodySmall,
@@ -682,6 +687,7 @@ private fun DeliveryDetailsDialog(
 
 @Composable
 private fun ServiceChargeInput(viewModel: OrderViewModel) {
+
     OutlinedTextField(
         value = viewModel.state.value.serviceCharges.toString(),
         onValueChange = { input ->
@@ -690,7 +696,7 @@ private fun ServiceChargeInput(viewModel: OrderViewModel) {
                 viewModel.updateServiceCharges(charges)
             }
         },
-        label = { Text("Service Charges") },
+        label = { Text(text = if (viewModel.state.value.orderType == OrderType.DELIVERY) "Delivery Charges" else "Service Charges") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         suffix = { Text("Rs.") },
         modifier = Modifier.fillMaxWidth()

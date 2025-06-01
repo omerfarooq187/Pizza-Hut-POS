@@ -290,9 +290,15 @@ class ReportViewModel : KoinComponent {
             write(boldOff)
 
             if (order.orderType == OrderType.DELIVERY) {
-                order.deliveryRider?.let { write("RIDER: ${it.uppercase()}\n".toByteArray(charset)) }
-                order.deliveryAddress?.let { write("CUSTOMER ADDRESS: ${it.uppercase()}\n\n".toByteArray(charset)) }
-                write("CUSTOMER PHONE: ${order.phone}\n\n".toByteArray(charset))
+                if (order.deliveryRider != "") {
+                    order.deliveryRider?.let { write("RIDER: ${it.uppercase()}\n".toByteArray(charset)) }
+                }
+                if (order.deliveryAddress != "") {
+                    order.deliveryAddress?.let { write("CUSTOMER ADDRESS: ${it.uppercase()}\n".toByteArray(charset)) }
+                }
+                if (order.phone != "") {
+                    write("CUSTOMER PHONE: ${order.phone}\n\n".toByteArray(charset))
+                }
             }
 
             // Items table header
@@ -324,7 +330,7 @@ class ReportViewModel : KoinComponent {
             val servicePrice = "%,.2f".format(order.servicesCharges.toDouble())
             val serviceLine = String.format(
                 "%-${colItemWidth + colQtyWidth + 1}s RS.%${colPriceWidth - 3}s\n",
-                "SERVICE CHARGES:",
+                if (order.orderType == OrderType.DELIVERY) "DELIVERY CHARGES:" else "SERVICE CHARGES:",
                 servicePrice
             )
             write(serviceLine.toByteArray(charset))
