@@ -33,6 +33,8 @@ import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.imageio.ImageIO
+import javax.print.PrintService
+import javax.print.PrintServiceLookup
 
 class OrderViewModel : KoinComponent {
     private val orderRepo: OrderRepository by inject()
@@ -235,10 +237,12 @@ class OrderViewModel : KoinComponent {
                 if (isEditing) {
                     orderRepo.updateOrder(order)
                     alerts += "Order updated successfully!"
+                    printReceipt(true)
                 } else {
                     val newId = orderRepo.createOrder(order)
                     _state.value = _state.value.copy(editingOrderId = newId)
                     alerts += "Order created successfully!"
+                    printReceipt(false)
                 }
 
                 // Process inventory after successful save
@@ -247,12 +251,6 @@ class OrderViewModel : KoinComponent {
                     isUpdate = isEditing,
                     orderItems = order.items
                 )
-
-                // Generate and print receipt
-                val receiptContent = buildReceiptContent().apply {
-                    println("Final Receipt Content:\n$this")
-                }
-                printReceiptWithLogo("Black Copper BC-85AC", state.value.editingOrderId.toString(),receiptContent)
 
                 // Post-processing
                 inventoryService.checkLowStock().forEach {
@@ -266,6 +264,13 @@ class OrderViewModel : KoinComponent {
                 alerts += errorMessage
                 e.printStackTrace()
             }
+        }
+    }
+
+    fun printReceipt(isOldOrder: Boolean) {
+        val printerName = getDefaultPrinter()?.name
+        if (printerName != null) {
+            printReceiptWithLogo(printerName, state.value.editingOrderId.toString(),buildReceiptContent(), isOldOrder)
         }
     }
 
@@ -324,8 +329,9 @@ class OrderViewModel : KoinComponent {
         val cutPaper = byteArrayOf(0x1D, 0x56, 0x41, 0x10)
 
         // Column widths
-        val colItemWidth = 38  // ITEM + size
-        val colQtyWidth = 8    // QTY
+        val colItemWidth = 30
+        val colQtyWidth = 4
+        val colPriceWidth = 12
 
         return ByteArrayOutputStream().apply {
             write(initialize)
@@ -342,13 +348,13 @@ class OrderViewModel : KoinComponent {
             write(leftAlign)
             write("Date: ${sdfDate.format(state.value.createdAt)}\n".toByteArray(charset))
             write("Time: ${sdfTime.format(state.value.createdAt)}\n".toByteArray(charset))
-//            write("Receipt ID: ${state.value.editingOrderId}\n".toByteArray(charset))
+//      write("Receipt ID: ${state.value.editingOrderId}\n".toByteArray(charset))
             write("${"-".repeat(lineWidth)}\n".toByteArray(charset))
 
             // Items table header
             write(boldOn)
-            val headerFormat = "%-${colItemWidth}s %${colQtyWidth}s\n"
-            write(headerFormat.format("ITEM", "QTY").toByteArray(charset))
+            val headerFormat = "%-${colItemWidth}s %-${colQtyWidth}s %${colPriceWidth}s\n"
+            write(headerFormat.format("ITEM", "QTY", "PRICE").toByteArray(charset))
             write("${"-".repeat(lineWidth)}\n".toByteArray(charset))
             write(boldOff)
 
@@ -359,9 +365,10 @@ class OrderViewModel : KoinComponent {
                     .take(colItemWidth)
 
                 val qty = "x${item.value.quantity}".take(colQtyWidth)
+                val price = String.format("%.2f", item.value.price * item.value.quantity) // total price for that line
 
-                val lineFormat = "%-${colItemWidth}s %${colQtyWidth}s\n"
-                val line = lineFormat.format(name, qty)
+                val lineFormat = "%-${colItemWidth}s %-${colQtyWidth}s %${colPriceWidth}s\n"
+                val line = lineFormat.format(name, qty, price)
                 write(line.toByteArray(charset))
             }
 
@@ -370,10 +377,13 @@ class OrderViewModel : KoinComponent {
             write(boldOn)
 
             val totalQuantity = state.value.items.values.sumOf { it.quantity }
+            val totalAmount = state.value.items.values.sumOf { it.price * it.quantity }
+
             val totalLine = String.format(
-                "%-${colItemWidth}s %${colQtyWidth}s\n",
-                "TOTAL ITEMS:",
-                "x$totalQuantity"
+                "%-${colItemWidth}s %-${colQtyWidth}s %${colPriceWidth}.2f\n",
+                "TOTAL:",
+                "x$totalQuantity",
+                totalAmount
             )
             write(totalLine.toByteArray(charset))
 
@@ -390,39 +400,46 @@ class OrderViewModel : KoinComponent {
     }
 
 
-    fun printReceiptWithLogo(printerName: String, receiptId: String, receiptData: ByteArray) {
+    fun printReceiptWithLogo(printerName: String, receiptId: String, receiptData: ByteArray, isOldOrder: Boolean) {
         var escpos: EscPos? = null
         var outputStream: PrinterOutputStream? = null
 
         try {
-            // 1. Validate printer exists
             val printServices = PrinterOutputStream.getListPrintServicesNames()
             if (!printServices.contains(printerName)) {
                 throw IllegalArgumentException("Printer '$printerName' not found. Available printers: ${printServices.joinToString()}")
             }
 
-            // 2. Initialize printer connection
             val printService = PrinterOutputStream.getPrintServiceByName(printerName)
             outputStream = PrinterOutputStream(printService)
             escpos = EscPos(outputStream)
 
-            // 3. Print bold, large Receipt ID at top-left
             val charset = Charset.forName("CP437")
-            val initialize = byteArrayOf(0x1B, 0x40) // ESC @ (initialize)
-            val boldOn = byteArrayOf(0x1B, 0x45, 0x01) // ESC E 1
-            val boldOff = byteArrayOf(0x1B, 0x45, 0x00) // ESC E 0
-            val doubleSize = byteArrayOf(0x1B, 0x21, 0x30) // ESC ! 0x30 (Double width + height)
-            val normalSize = byteArrayOf(0x1B, 0x21, 0x00) // ESC ! 0
+            val initialize = byteArrayOf(0x1B, 0x40)
+            val boldOn = byteArrayOf(0x1B, 0x45, 0x01)
+            val boldOff = byteArrayOf(0x1B, 0x45, 0x00)
+            val doubleSize = byteArrayOf(0x1B, 0x21, 0x30)
+            val normalSize = byteArrayOf(0x1B, 0x21, 0x00)
 
+            // --- Start printing ---
             outputStream.write(initialize)
             outputStream.write(doubleSize)
             outputStream.write(boldOn)
+
+            // Always print receipt ID
             outputStream.write("Receipt ID: $receiptId\n".toByteArray(charset))
+
+            // If editing -> mark as OLD ORDER
+            if (isOldOrder) {
+                outputStream.write("OLD ORDER\n".toByteArray(charset))
+                println("Order is old")
+            }
+
             outputStream.write(boldOff)
             outputStream.write(normalSize)
             outputStream.write("\n".toByteArray(charset))
 
-            // 4. Print logo
+            // Print logo
             val imageStream = javaClass.getResourceAsStream("/logo.jpg").use { stream ->
                 val originalImage = ImageIO.read(stream)
                 val targetWidth = 300
@@ -446,12 +463,10 @@ class OrderViewModel : KoinComponent {
                 imageStream
             )
 
-            // 5. Print actual receipt content
             escpos.feed(2)
             outputStream.write(receiptData)
             outputStream.flush()
 
-            // 6. Cut paper (if needed)
             escpos.cut(EscPos.CutMode.FULL)
 
         } catch (e: Exception) {
@@ -462,6 +477,7 @@ class OrderViewModel : KoinComponent {
             outputStream?.close()
         }
     }
+
 
 
     private fun convertToHighContrast(image: BufferedImage): BufferedImage {
@@ -507,4 +523,7 @@ class OrderViewModel : KoinComponent {
         calculateTotals()
     }
 
+    private fun getDefaultPrinter(): PrintService? {
+        return PrintServiceLookup.lookupDefaultPrintService()
+    }
 }

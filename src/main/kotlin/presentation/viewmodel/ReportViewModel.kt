@@ -357,14 +357,6 @@ class ReportViewModel : KoinComponent {
         }.toByteArray()
     }
 
-//    private fun formatLine(item: String, qty: String, price: String, itemWidth: Int, qtyWidth: Int, priceWidth: Int): String {
-//        val itemCol = if (item.length > itemWidth) item.take(itemWidth - 1) + "…" else item.padEnd(itemWidth)
-//        val qtyCol = qty.padStart(qtyWidth)
-//        val priceCol = price.padStart(priceWidth)
-//        // Add spaces between columns
-//        return "$itemCol $qtyCol $priceCol"
-//    }
-
     fun printReceiptForOrder(order: Order) {
         CoroutineScope(Dispatchers.IO).launch {
             try {

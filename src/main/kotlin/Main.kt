@@ -27,6 +27,7 @@ import org.koin.core.context.startKoin
 import presentation.screens.*
 import presentation.theme.PizzaHutTheme
 import session.SessionManager
+import java.awt.Dimension
 
 fun main()  {
     application {
@@ -47,6 +48,7 @@ fun main()  {
                     })
                 }
             }
+            window.minimumSize = Dimension(800,600)
         }
     }
 }
@@ -69,7 +71,7 @@ fun TabbedInterface(onLogout:()-> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(220.dp)
+                .width(170.dp)
                 .background(Color(0xFFFE724C)),
             verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally

@@ -321,8 +321,8 @@ private fun MenuItemCard(
 
     Card(
         modifier = Modifier
-            .width(170.dp)
-            .height(190.dp)
+            .fillMaxWidth()
+            .aspectRatio(0.9F)
             .padding(6.dp)
             .clickable { showVariants = true },
         elevation = CardDefaults.cardElevation(6.dp),

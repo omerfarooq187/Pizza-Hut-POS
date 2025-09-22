@@ -57,7 +57,7 @@ compose.desktop {
 
             // Package metadata
             packageName = "Pizza Hut POS"
-            packageVersion = "1.1.0"
+            packageVersion = "1.1.1"
             description = "Pizza Point of Sale System"
             vendor = "Mandra Pizza Hut"
             copyright = "© 2025 Mandra Pizza Hut"
