@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import data.model.RawItem
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import presentation.theme.PizzaRed
 import presentation.theme.PizzaWhite
@@ -29,6 +31,8 @@ import presentation.viewmodel.InventoryViewModel
 @Composable
 fun InventoryScreen(viewModel: InventoryViewModel = koinInject()) {
     var showAddDialog by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -67,9 +71,15 @@ fun InventoryScreen(viewModel: InventoryViewModel = koinInject()) {
             // Status Summary
             InventorySummary(viewModel)
 
-            // Error Messages
+
             if (viewModel.errors.isNotEmpty()) {
                 ErrorMessages(viewModel.errors)
+
+                LaunchedEffect(viewModel.errors) {
+                    // Wait 5 seconds, then clear errors
+                    delay(2000)
+                    viewModel.clearErrors()
+                }
             }
 
             // Inventory List
@@ -93,6 +103,26 @@ fun InventoryScreen(viewModel: InventoryViewModel = koinInject()) {
             onConfirm = viewModel::replenishStock
         )
     }
+
+    if (viewModel.showEditDialog && viewModel.selectedItemForEdit != null) {
+        EditRawItemDialog(
+            showDialog = viewModel.showEditDialog,
+            item = viewModel.selectedItemForEdit,
+            onDismiss = { viewModel.showEditDialog = false },
+            onConfirm = viewModel::updateRawItem
+        )
+    }
+
+    if (viewModel.showDeleteDialog && viewModel.itemToDelete != null) {
+        DeleteConfirmationDialog(
+            showDialog = viewModel.showDeleteDialog,
+            item = viewModel.itemToDelete,
+            onDismiss = viewModel::dismissDeleteDialog,
+            onConfirm = viewModel::deleteRawItem
+        )
+    }
+
+
 }
 
 @Composable
@@ -167,6 +197,7 @@ private fun ErrorMessages(errors: List<String>) {
             Spacer(modifier = Modifier.height(4.dp))
         }
     }
+
 }
 
 @Composable
@@ -228,26 +259,18 @@ private fun InventoryList(items: List<RawItem>, viewModel: InventoryViewModel) {
 
 @Composable
 private fun InventoryItemCard(item: RawItem, viewModel: InventoryViewModel) {
-    // Check if threshold is valid (positive and not null)
-    val isValidThreshold = item.alertThreshold?.let { it > 0 } ?: false
     val currentItem by rememberUpdatedState(item)
-
+    val isValidThreshold = item.alertThreshold?.let { it > 0 } ?: false
 
     val progress = remember(item) {
-        if (isValidThreshold) {
-            // Calculate progress as currentStock / threshold, capped at 1.0
-            (item.currentStock / item.alertThreshold!!).coerceAtMost(1.0).toFloat()
-        } else {
-            1f // Full bar if no valid threshold
-        }
+        if (isValidThreshold) (item.currentStock / item.alertThreshold!!).coerceAtMost(1.0).toFloat()
+        else 1f
     }
 
-    // Determine color based on stock status
     val color = when {
-        item.currentStock <= item.alertThreshold!! -> MaterialTheme.colorScheme.error
+        item.alertThreshold != null && item.currentStock <= item.alertThreshold -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.secondary
     }
-
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -263,38 +286,30 @@ private fun InventoryItemCard(item: RawItem, viewModel: InventoryViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
 
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Button(
-                        onClick = { viewModel.showReplenishDialog(currentItem) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = PizzaRed,
-                            contentColor = PizzaWhite
-                        ),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Text("Add Stock")
+                Row {
+                    IconButton(onClick = { viewModel.showReplenishDialog(currentItem) }) {
+                        Icon(Icons.Default.AddCircle, contentDescription = "Add Stock", tint = PizzaRed)
+                    }
+                    IconButton(onClick = {
+                        viewModel.selectedItemForEdit = item
+                        viewModel.showEditDialog = true
+                    }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Item", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { viewModel.confirmDelete(item) }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete Item", tint = MaterialTheme.colorScheme.error)
                     }
                 }
-
-                StockStatusIndicator(
-                    currentStock = item.currentStock,
-                    alertThreshold = item.alertThreshold
-                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Stock Progress
             LinearProgressIndicator(
                 progress = progress,
                 modifier = Modifier
@@ -312,31 +327,20 @@ private fun InventoryItemCard(item: RawItem, viewModel: InventoryViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text(
-                        text = "Current Stock",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    Text(
-                        text = "${formatStockAmount(item.currentStock)} ${item.unit}",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Text("Current Stock", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text("${formatStockAmount(item.currentStock)} ${item.unit}", style = MaterialTheme.typography.bodyLarge)
                 }
 
-                item.alertThreshold.let {
+                item.alertThreshold?.let {
                     Column {
-                        Text(
-                            text = "Alert Threshold",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "$it ${item.unit}",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        Text("Alert Threshold", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Text("$it ${item.unit}", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            StockStatusIndicator(item.currentStock, item.alertThreshold)
         }
     }
 }
@@ -470,6 +474,72 @@ fun AddRawItemDialog(
 }
 
 @Composable
+fun EditRawItemDialog(
+    showDialog: Boolean,
+    item: RawItem?,
+    onDismiss: () -> Unit,
+    onConfirm: (RawItem) -> Unit
+) {
+    if (item == null) return
+    var name by remember { mutableStateOf(item.name) }
+    var unit by remember { mutableStateOf(item.unit) }
+    var currentStock by remember { mutableStateOf(item.currentStock.toString()) }
+    var alertThreshold by remember { mutableStateOf(item.alertThreshold?.toString() ?: "") }
+    var supplier by remember { mutableStateOf(item.supplier ?: "") }
+    var description by remember { mutableStateOf(item.description ?: "") }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Edit Raw Item") },
+            text = {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name*") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = unit, onValueChange = { unit = it }, label = { Text("Unit*") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = currentStock,
+                        onValueChange = { currentStock = it },
+                        label = { Text("Current Stock") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = alertThreshold,
+                        onValueChange = { alertThreshold = it },
+                        label = { Text("Alert Threshold") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(value = supplier, onValueChange = { supplier = it }, label = { Text("Supplier") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val updated = item.copy(
+                            name = name,
+                            unit = unit,
+                            currentStock = currentStock.toDoubleOrNull() ?: 0.0,
+                            alertThreshold = alertThreshold.toDoubleOrNull(),
+                            supplier = supplier.ifEmpty { null },
+                            description = description.ifEmpty { null }
+                        )
+                        onConfirm(updated)
+                        onDismiss()
+                    },
+                    enabled = name.isNotBlank() && unit.isNotBlank()
+                ) {
+                    Text("Save Changes")
+                }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        )
+    }
+}
+
+
+@Composable
 private fun ReplenishDialog(
     item: RawItem?,
     onDismiss: () -> Unit,
@@ -508,4 +578,47 @@ private fun ReplenishDialog(
             }
         }
     )
+}
+
+
+@Composable
+fun DeleteConfirmationDialog(
+    showDialog: Boolean,
+    item: RawItem?,
+    onDismiss: () -> Unit,
+    onConfirm: (RawItem) -> Unit
+) {
+    if (showDialog && item != null) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = {
+                Icon(
+                    Icons.Default.DeleteForever,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Delete ${item.name}?") },
+            text = { Text("This action cannot be undone. Are you sure you want to permanently delete this item?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onConfirm(item)
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }

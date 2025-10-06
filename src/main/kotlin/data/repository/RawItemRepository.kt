@@ -5,10 +5,14 @@ import database.InventoryTransactions
 import database.RawItems
 import database.TransactionType
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 
 interface RawItemRepository {
     suspend fun createRawItem(rawItem: RawItem)
+    suspend fun updateRawItem(rawItem: RawItem)
+    suspend fun deleteRawItem(id: Int)
+
     suspend fun getRawItem(id: Int): RawItem?
     suspend fun getAllRawItems(): List<RawItem>
     suspend fun updateStock(
@@ -33,6 +37,26 @@ class RawItemRepositoryImpl: RawItemRepository {
             }
         }
     }
+
+    override suspend fun updateRawItem(rawItem: RawItem) {
+        transaction {
+            RawItems.update({ RawItems.id eq rawItem.id }) {
+                it[name] = rawItem.name
+                it[description] = rawItem.description
+                it[unit] = rawItem.unit
+                it[currentStock] = rawItem.currentStock
+                it[alertThreshold] = rawItem.alertThreshold
+                it[supplier] = rawItem.supplier
+            }
+        }
+    }
+
+    override suspend fun deleteRawItem(id: Int) {
+        transaction {
+            RawItems.deleteWhere { RawItems.id eq id }
+        }
+    }
+
 
     override suspend fun getRawItem(id: Int): RawItem? {
         return transaction {

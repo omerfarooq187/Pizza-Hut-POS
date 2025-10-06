@@ -31,9 +31,22 @@ class InventoryViewModel : KoinComponent {
     private val _errors = mutableStateListOf<String>()
     val errors: List<String> get() = _errors
 
+    // 🔹 New UI states for editing
+    var showEditDialog by mutableStateOf(false)
+    var selectedItemForEdit by mutableStateOf<RawItem?>(null)
+
+    var showDeleteDialog by mutableStateOf(false)
+    var itemToDelete by mutableStateOf<RawItem?>(null)
+
+
+
     init {
         loadInventory()
     }
+
+    // -------------------
+    //  INVENTORY OPERATIONS
+    // -------------------
 
     fun loadInventory() {
         CoroutineScope(Dispatchers.Main.immediate).launch {
@@ -53,6 +66,14 @@ class InventoryViewModel : KoinComponent {
             }
         }
     }
+
+    fun clearErrors() {
+        _errors.clear()
+    }
+
+    // -------------------
+    //  REPLENISH
+    // -------------------
 
     fun showReplenishDialog(item: RawItem) {
         selectedItem = item
@@ -88,15 +109,81 @@ class InventoryViewModel : KoinComponent {
         }
     }
 
+    // -------------------
+    //  CREATE NEW ITEM
+    // -------------------
+
     fun createRawItem(rawItem: RawItem) {
         CoroutineScope(Dispatchers.Main.immediate).launch {
             try {
                 rawItemRepo.createRawItem(rawItem)
-                _errors.add("Successfully added ${rawItem.name}")
-                loadInventory() // Refresh the list
+                _errors.add("✅ Added ${rawItem.name}")
+                loadInventory()
             } catch (e: Exception) {
-                _errors.add("Failed to add item: ${e.message}")
+                _errors.add("❌ Failed to add item: ${e.message}")
             }
         }
     }
+
+    // -------------------
+    //  EDIT ITEM
+    // -------------------
+
+    fun updateRawItem(updatedItem: RawItem) {
+        CoroutineScope(Dispatchers.Main.immediate).launch {
+            try {
+                rawItemRepo.updateRawItem(updatedItem)
+                _errors.add("Updated ${updatedItem.name} successfully.")
+                loadInventory()
+            } catch (e: Exception) {
+                _errors.add("Failed to update ${updatedItem.name}: ${e.message}")
+            } finally {
+                showEditDialog = false
+                selectedItemForEdit = null
+            }
+        }
+    }
+
+
+    // -------------------
+    //  DELETE ITEM
+    // -------------------
+
+    fun deleteRawItem(item: RawItem) {
+        CoroutineScope(Dispatchers.Main.immediate).launch {
+            try {
+                rawItemRepo.deleteRawItem(item.id)
+                _errors.add("Deleted ${item.name}")
+                loadInventory()
+            } catch (e: Exception) {
+                _errors.add("Failed to delete ${item.name}: ${e.message}")
+            }
+        }
+    }
+
+    // -------------------
+    //  EDIT DIALOG HELPERS
+    // -------------------
+
+    fun selectItemForEdit(item: RawItem) {
+        selectedItemForEdit = item
+        showEditDialog = true
+    }
+
+
+    fun cancelEdit() {
+        showEditDialog = false
+        selectedItemForEdit = null
+    }
+
+    fun confirmDelete(item: RawItem) {
+        itemToDelete = item
+        showDeleteDialog = true
+    }
+
+    fun dismissDeleteDialog() {
+        itemToDelete = null
+        showDeleteDialog = false
+    }
+
 }
