@@ -16,6 +16,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -156,17 +159,23 @@ fun DashboardCard(
     icon: ImageVector,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Box(
         modifier = modifier
-            .height(120.dp)
-            .padding(4.dp),
-        colors = CardDefaults.cardColors(containerColor = color),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            .height(140.dp)
+            .fillMaxWidth()
+            .shadow(8.dp, RoundedCornerShape(20.dp)) // mimic card elevation
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(color, color.copy(alpha = 0.7f)),
+                    start = Offset(0f, 0f),
+                    end = Offset(1000f, 1000f) // ensures full coverage
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(16.dp) // inner padding
     ) {
         Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -174,27 +183,31 @@ fun DashboardCard(
                     imageVector = icon,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
-
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(color = Color.White),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+
             Text(
                 text = value,
                 style = MaterialTheme.typography.displaySmall.copy(
                     color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.ExtraBold
                 )
             )
         }
     }
 }
+
 
 @Composable
 fun OrderRow(
@@ -263,6 +276,16 @@ fun OrderRow(
         }
         }
     }
+}
+
+
+@Composable
+fun GradientCardBackground(color1: Color, color2: Color): Brush {
+    return Brush.linearGradient(
+        colors = listOf(color1, color2),
+        start = Offset(0f, 0f),
+        end = Offset(300f, 300f)
+    )
 }
 
 @Composable
